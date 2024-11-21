@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "SkipFuse",
+    name: "skip-fuse",
     platforms: [.iOS(.v16), .macOS(.v13), .tvOS(.v16), .watchOS(.v9), .macCatalyst(.v16)],
     products: [
         .library(name: "SkipFuse", type: .dynamic, targets: ["SkipFuse"]),

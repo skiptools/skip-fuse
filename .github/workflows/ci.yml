@@ -20,5 +20,7 @@ jobs:
       #runs-on: "['macos-13', 'macos-14', 'macos-15']"
       # disable export because there are currently problems with shared PCH module cache files with multi-module native export
       run-export: false
-      #run-local-tests: false
+      run-local-tests: false
+      # this package is not transpiled, and so there are no Android tests
+      run-android-tests: false
 
