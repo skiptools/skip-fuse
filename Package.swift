@@ -13,7 +13,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "SkipFuse", dependencies: [
-            .product(name: "SkipAndroidBridgeKt", package: "skip-android-bridge"),
+            .product(name: "SkipAndroidBridge", package: "skip-android-bridge"),
         ]),
         .testTarget(name: "SkipFuseTests", dependencies: ["SkipFuse"]),
     ]
