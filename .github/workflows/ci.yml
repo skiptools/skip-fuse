@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   call-workflow:
-    uses: skiptools/actions/.github/workflows/skip-framework.yml@main
+    uses: skiptools/actions/.github/workflows/skip-framework.yml@v1
     with:
       # skip running local tests because they crash on macos-13
       #run-local-tests: false
