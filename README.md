@@ -1,6 +1,6 @@
 # SkipFuse
 
-SkipFuse helps fuse the Swift and Android worlds for [Skip Fuse](https://skip.tools/docs/modes/#native) modules and apps. It is an umbrella framework that vends cross-platform functionality. For example, SkipFuse:
+SkipFuse helps fuse the Swift and Android worlds for [Skip Fuse](https://skip.dev/docs/modes/#native) modules and apps. It is an umbrella framework that vends cross-platform functionality. For example, SkipFuse:
 
 - Vends OSLog APIs on Android so that your OSLog messages appear in Android's Logcat logging.
 - Transparently integrates your Swift `@Observables` into Jetpack Compose, so that they can transparently power Compose UI.
@@ -8,7 +8,7 @@ SkipFuse helps fuse the Swift and Android worlds for [Skip Fuse](https://skip.to
 
 Skip will be enhancing SkipFuse over time to integrate many additional Swift foundational APIs with Android.
 
-See the Skip [documentation](https://skip.tools/docs/) for details.
+See the Skip [documentation](https://skip.dev/docs/) for details.
 
 ## Setup
 
@@ -22,7 +22,7 @@ let package = Package(
         .library(name: "MyProduct", targets: ["MyTarget"]),
     ],
     dependencies: [
-        .package(url: "https://source.skip.tools/skip-fuse.git", from: "1.0.0"),
+        .package(url: "https://source.skip.dev/skip-fuse.git", from: "1.0.0"),
     ],
     targets: [
         .target(name: "MyTarget", dependencies: [
@@ -36,25 +36,5 @@ let package = Package(
 
 This software is licensed under the
 [GNU Lesser General Public License v3.0](https://spdx.org/licenses/LGPL-3.0-only.html),
-with the following
-[linking exception](https://spdx.org/licenses/LGPL-3.0-linking-exception.html)
-to clarify that distribution to restricted environments (e.g., app stores)
-is permitted:
-
-> This software is licensed under the LGPL3, included below.
-> As a special exception to the GNU Lesser General Public License version 3
-> ("LGPL3"), the copyright holders of this Library give you permission to
-> convey to a third party a Combined Work that links statically or dynamically
-> to this Library without providing any Minimal Corresponding Source or
-> Minimal Application Code as set out in 4d or providing the installation
-> information set out in section 4e, provided that you comply with the other
-> provisions of LGPL3 and provided that you meet, for the Application the
-> terms and conditions of the license(s) which apply to the Application.
-> Except as stated in this special exception, the provisions of LGPL3 will
-> continue to comply in full to this Library. If you modify this Library, you
-> may apply this exception to your version of this Library, but you are not
-> obliged to do so. If you do not wish to do so, delete this exception
-> statement from your version. This exception does not (and cannot) modify any
-> license terms which apply to the Application, with which you must still
-> comply.
-
+with a [linking exception](https://spdx.org/licenses/LGPL-3.0-linking-exception.html)
+to clarify that distribution to restricted environments (e.g., app stores) is permitted.
