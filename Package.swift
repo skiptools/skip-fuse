@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.1
 
 import PackageDescription
 
@@ -9,8 +9,10 @@ let package = Package(
         .library(name: "SkipFuse", type: .dynamic, targets: ["SkipFuse"]),
     ],
     dependencies: [
-        .package(url: "https://source.skip.tools/skip-android-bridge.git", "0.0.0"..<"2.0.0"),
-        .package(url: "https://source.skip.tools/swift-jni.git", "0.0.0"..<"2.0.0"),
+        //.package(url: "https://source.skip.tools/skip-android-bridge.git", "0.0.0"..<"2.0.0"),
+        .package(url: "https://source.skip.tools/skip-android-bridge.git", branch: "swift-java-jni-cutover"), // ### REMOVEME
+        //.package(url: "https://source.skip.tools/swift-jni.git", "0.0.0"..<"2.0.0"),
+        .package(url: "https://source.skip.tools/swift-jni.git", branch: "swift-java-jni-cutover"), // ### REMOVEME
     ],
     targets: [
         .target(name: "SkipFuse", dependencies: [
