@@ -9,8 +9,8 @@ let package = Package(
         .library(name: "SkipFuse", type: .dynamic, targets: ["SkipFuse"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/skiptools/skip-android-bridge.git", "0.0.0"..<"2.0.0"),
-        .package(url: "https://github.com/skiptools/swift-jni.git", "0.0.0"..<"2.0.0"),
+        .package(url: "https://github.com/skiptools/skip-android-bridge.git", "0.6.5"..<"2.0.0"),
+        .package(url: "https://github.com/skiptools/swift-jni.git", "0.5.0"..<"2.0.0"),
     ],
     targets: [
         .target(name: "SkipFuse", dependencies: [
