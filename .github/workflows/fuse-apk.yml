@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-26-intel, ubuntu-24.04]
-        swift-version: ['6.3', '6.4']
+        swift-version: ['6.3.3', '6.4.0']
         build-system: [swiftbuild, native]
     defaults:
       run:
@@ -107,9 +107,25 @@ jobs:
             echo "| Host build | $HOST_OUTCOME |"
             echo "| APK build and Swift Testing | $APK_OUTCOME |"
           } >> "$GITHUB_STEP_SUMMARY"
-          # Continue after host failures to collect Android results, but keep
-          # failing permutations red so this remains a regression check.
-          test "$HOST_OUTCOME" = success && test "$APK_OUTCOME" = success
+
+      # continue-on-error changes the displayed conclusion of the build steps;
+      # use their original outcomes to enforce the compatibility check.
+      - name: Require successful host build and APK tests
+        if: ${{ !cancelled() }}
+        env:
+          HOST_OUTCOME: ${{ steps.host.outcome }}
+          APK_OUTCOME: ${{ steps.apk.outcome }}
+        run: |
+          failed=0
+          if [[ "$HOST_OUTCOME" != success ]]; then
+            echo "::error title=Fuse host build did not pass::Outcome: $HOST_OUTCOME. See 'Build Fuse project on host' and the uploaded host.log."
+            failed=1
+          fi
+          if [[ "$APK_OUTCOME" != success ]]; then
+            echo "::error title=Fuse APK tests did not pass::Outcome: $APK_OUTCOME. See 'Build and test APK on emulator' and the uploaded apk.log (if the test script started)."
+            failed=1
+          fi
+          exit "$failed"
 
       - name: Upload diagnostics
         if: always()
