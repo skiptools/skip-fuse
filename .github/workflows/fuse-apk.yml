@@ -1,0 +1,124 @@
+name: Fuse APK compatibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 14 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  fuse-apk:
+    name: ${{ matrix.os }} / Swift ${{ matrix.swift-version }} / ${{ matrix.build-system }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26-intel, ubuntu-24.04]
+        swift-version: ['6.3', '6.4']
+        build-system: [swiftbuild, native]
+    defaults:
+      run:
+        shell: bash
+    env:
+      SWIFT_VERSION: ${{ matrix.swift-version }}
+      BUILD_SYSTEM: ${{ matrix.build-system }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: skip-fuse
+
+      # Keep the local package identity stable, even in forks with another name.
+      - name: Prepare results directory
+        run: mkdir -p skip-fuse/ci-results
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: skiptools/actions/setup-skip@v1
+        with:
+          swift-version: ${{ matrix.swift-version }}
+          install-swift-android-sdk: 'true'
+          swift-android-sdk-version: ${{ matrix.swift-version }}
+          run-doctor: 'false'
+
+      - name: Record toolchain versions
+        working-directory: skip-fuse
+        run: |
+          set -o pipefail
+          {
+            skip version
+            swiftly run swift --version +"$SWIFT_VERSION"
+            skip android build --swift-version "$SWIFT_VERSION" --version
+          } 2>&1 | tee ci-results/versions.log
+
+      # This unbridged host build is essential: Android's SKIP_BRIDGE mode
+      # changes linkage and can hide the original checkup failure.
+      - name: Build Fuse project on host
+        id: host
+        continue-on-error: true
+        working-directory: skip-fuse
+        run: |
+          set -o pipefail
+          swiftly run swift build --verbose \
+            --package-path .github/fixtures/fuse-apk \
+            --scratch-path "$RUNNER_TEMP/fuse-apk-host" \
+            --build-system "$BUILD_SYSTEM" +"$SWIFT_VERSION" \
+            2>&1 | tee ci-results/host.log
+
+      - name: Enable KVM
+        if: runner.os == 'Linux'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build and test APK on emulator
+        id: apk
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          arch: x86_64
+          target: default
+          disable-animations: true
+          working-directory: skip-fuse
+          script: bash .github/scripts/test-fuse-apk.sh
+
+      - name: Record results
+        if: always()
+        working-directory: skip-fuse
+        env:
+          HOST_OUTCOME: ${{ steps.host.outcome }}
+          APK_OUTCOME: ${{ steps.apk.outcome }}
+        run: |
+          {
+            echo "### $RUNNER_OS / Swift $SWIFT_VERSION / $BUILD_SYSTEM"
+            echo '| Check | Result |'
+            echo '| --- | --- |'
+            echo "| Host build | $HOST_OUTCOME |"
+            echo "| APK build and Swift Testing | $APK_OUTCOME |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Continue after host failures to collect Android results, but keep
+          # failing permutations red so this remains a regression check.
+          test "$HOST_OUTCOME" = success && test "$APK_OUTCOME" = success
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuse-apk-${{ matrix.os }}-${{ matrix.swift-version }}-${{ matrix.build-system }}
+          include-hidden-files: true
+          path: |
+            skip-fuse/ci-results/
+            skip-fuse/.github/fixtures/fuse-apk/Package.resolved
+            ${{ runner.temp }}/fuse-apk-staging/**/*.apk
+          retention-days: 14
