@@ -12,10 +12,14 @@ permissions:
   contents: read
 
 jobs:
-  fuse-apk:
-    name: ${{ matrix.os }} / Swift ${{ matrix.swift-version }} / ${{ matrix.build-system }}
+  # Host-only gate. Building the fixture for the host needs no emulator and takes
+  # well under a minute per cell, so it catches the whole class of package-graph
+  # linkage failures (the swiftbuild "duplication of library code" diamond) long
+  # before the ~40 minute APK matrix starts. The APK job waits on every cell here.
+  fuse-host:
+    name: host / ${{ matrix.os }} / Swift ${{ matrix.swift-version }} / ${{ matrix.build-system }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -28,6 +32,13 @@ jobs:
     env:
       SWIFT_VERSION: ${{ matrix.swift-version }}
       BUILD_SYSTEM: ${{ matrix.build-system }}
+      # Build the shared Skip library products as dynamic libraries. swiftbuild
+      # rejects a graph where two dynamic products statically link the same
+      # automatic-library product, and SwiftPM's own PIF gives those product
+      # wrappers no dynamic variant to promote to, so it cannot resolve it
+      # itself. Set for the native leg too, so both legs build the same graph
+      # shape and a green native run actually says something about the other.
+      SKIP_DYNAMIC_LIBRARIES: '1'
 
     steps:
       - uses: actions/checkout@v7
@@ -45,6 +56,10 @@ jobs:
 
       - uses: skiptools/actions/setup-skip@v1
         with:
+          # TEMPORARY: source-build skipstone from the branch of skiptools/skipstone#271,
+          # which makes --build-system a first-class option with a SKIP_BUILD_SYSTEM
+          # override. Drop this input once that PR is merged and released.
+          skip-source: swiftbuild-native
           swift-version: ${{ matrix.swift-version }}
           install-swift-android-sdk: 'true'
           swift-android-sdk-version: ${{ matrix.swift-version }}
@@ -74,6 +89,98 @@ jobs:
             --build-system "$BUILD_SYSTEM" +"$SWIFT_VERSION" \
             2>&1 | tee ci-results/host.log
 
+      - name: Record results
+        if: always()
+        working-directory: skip-fuse
+        env:
+          HOST_OUTCOME: ${{ steps.host.outcome }}
+        run: |
+          {
+            echo "### host / $RUNNER_OS / Swift $SWIFT_VERSION / $BUILD_SYSTEM"
+            echo '| Check | Result |'
+            echo '| --- | --- |'
+            echo "| Host build | $HOST_OUTCOME |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # continue-on-error changes the displayed conclusion of the build step;
+      # use its original outcome to enforce the compatibility check.
+      - name: Require successful host build
+        if: ${{ !cancelled() }}
+        env:
+          HOST_OUTCOME: ${{ steps.host.outcome }}
+        run: |
+          if [[ "$HOST_OUTCOME" != success ]]; then
+            echo "::error title=Fuse host build did not pass::Outcome: $HOST_OUTCOME. See 'Build Fuse project on host' and the uploaded host.log."
+            exit 1
+          fi
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuse-host-${{ matrix.os }}-${{ matrix.swift-version }}-${{ matrix.build-system }}
+          include-hidden-files: true
+          path: |
+            skip-fuse/ci-results/
+            skip-fuse/.github/fixtures/fuse-apk/Package.resolved
+          retention-days: 14
+
+  fuse-apk:
+    name: ${{ matrix.os }} / Swift ${{ matrix.swift-version }} / ${{ matrix.build-system }}
+    # Every host cell must be green before any emulator time is spent. `needs` is
+    # all-or-nothing across a matrix, so one red host cell skips the whole APK job.
+    needs: fuse-host
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26-intel, ubuntu-24.04]
+        swift-version: ['6.3.3', '6.4.0']
+        build-system: [swiftbuild, native]
+    defaults:
+      run:
+        shell: bash
+    env:
+      SWIFT_VERSION: ${{ matrix.swift-version }}
+      BUILD_SYSTEM: ${{ matrix.build-system }}
+      # See the note in the fuse-host job; the APK build reaches the same graph
+      # through SKIP_BRIDGE, but this keeps the two jobs building it identically.
+      SKIP_DYNAMIC_LIBRARIES: '1'
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: skip-fuse
+
+      # Keep the local package identity stable, even in forks with another name.
+      - name: Prepare results directory
+        run: mkdir -p skip-fuse/ci-results
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: skiptools/actions/setup-skip@v1
+        with:
+          # TEMPORARY: see the note in the fuse-host job.
+          skip-source: swiftbuild-native
+          swift-version: ${{ matrix.swift-version }}
+          install-swift-android-sdk: 'true'
+          swift-android-sdk-version: ${{ matrix.swift-version }}
+          run-doctor: 'false'
+
+      - name: Record toolchain versions
+        working-directory: skip-fuse
+        run: |
+          set -o pipefail
+          {
+            skip version
+            swiftly run swift --version +"$SWIFT_VERSION"
+            skip android build --swift-version "$SWIFT_VERSION" --version
+          } 2>&1 | tee ci-results/versions.log
+
       - name: Enable KVM
         if: runner.os == 'Linux'
         run: |
@@ -97,35 +204,26 @@ jobs:
         if: always()
         working-directory: skip-fuse
         env:
-          HOST_OUTCOME: ${{ steps.host.outcome }}
           APK_OUTCOME: ${{ steps.apk.outcome }}
         run: |
           {
             echo "### $RUNNER_OS / Swift $SWIFT_VERSION / $BUILD_SYSTEM"
             echo '| Check | Result |'
             echo '| --- | --- |'
-            echo "| Host build | $HOST_OUTCOME |"
             echo "| APK build and Swift Testing | $APK_OUTCOME |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # continue-on-error changes the displayed conclusion of the build steps;
-      # use their original outcomes to enforce the compatibility check.
-      - name: Require successful host build and APK tests
+      # continue-on-error changes the displayed conclusion of the build step;
+      # use its original outcome to enforce the compatibility check.
+      - name: Require successful APK tests
         if: ${{ !cancelled() }}
         env:
-          HOST_OUTCOME: ${{ steps.host.outcome }}
           APK_OUTCOME: ${{ steps.apk.outcome }}
         run: |
-          failed=0
-          if [[ "$HOST_OUTCOME" != success ]]; then
-            echo "::error title=Fuse host build did not pass::Outcome: $HOST_OUTCOME. See 'Build Fuse project on host' and the uploaded host.log."
-            failed=1
-          fi
           if [[ "$APK_OUTCOME" != success ]]; then
             echo "::error title=Fuse APK tests did not pass::Outcome: $APK_OUTCOME. See 'Build and test APK on emulator' and the uploaded apk.log (if the test script started)."
-            failed=1
+            exit 1
           fi
-          exit "$failed"
 
       - name: Upload diagnostics
         if: always()
