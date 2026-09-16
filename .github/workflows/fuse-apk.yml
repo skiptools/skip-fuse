@@ -17,21 +17,28 @@ jobs:
   # linkage failures (the swiftbuild "duplication of library code" diamond) long
   # before the ~40 minute APK matrix starts. The APK job waits on every cell here.
   fuse-host:
-    name: host / ${{ matrix.os }} / Swift ${{ matrix.swift-version }} / ${{ matrix.build-system }}
+    name: host / ${{ matrix.os }} / Swift ${{ matrix.swift-version }} / ${{ matrix.build-system }} / skipstone@${{ matrix.skip-source }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    # A red `main` cell is the expected result here, not a broken pipeline, so it
+    # neither fails the workflow nor holds back the jobs that depend on this one.
+    continue-on-error: ${{ matrix.skip-source == 'main' }}
     strategy:
       fail-fast: false
       matrix:
         os: [macos-26-intel, ubuntu-24.04]
         swift-version: ['6.3.3', '6.4.0']
         build-system: [swiftbuild, native]
+        # `main` is the control: it shows what skiptools/skipstone#271 changes.
+        # Those cells are informational and gate nothing (continue-on-error below).
+        skip-source: [main, swiftbuild-native]
     defaults:
       run:
         shell: bash
     env:
       SWIFT_VERSION: ${{ matrix.swift-version }}
       BUILD_SYSTEM: ${{ matrix.build-system }}
+      SKIP_SOURCE: ${{ matrix.skip-source }}
       # Build the shared Skip library products as dynamic libraries. swiftbuild
       # rejects a graph where two dynamic products statically link the same
       # automatic-library product, and SwiftPM's own PIF gives those product
@@ -56,10 +63,11 @@ jobs:
 
       - uses: skiptools/actions/setup-skip@v1
         with:
-          # TEMPORARY: source-build skipstone from the branch of skiptools/skipstone#271,
-          # which makes --build-system a first-class option with a SKIP_BUILD_SYSTEM
-          # override. Drop this input once that PR is merged and released.
-          skip-source: swiftbuild-native
+          # Source-build skipstone from the ref under test: `swiftbuild-native`
+          # is the branch of skiptools/skipstone#271, which makes --build-system a
+          # first-class option with a SKIP_BUILD_SYSTEM override, and `main` is the
+          # control that shows the behaviour without it.
+          skip-source: ${{ matrix.skip-source }}
           swift-version: ${{ matrix.swift-version }}
           install-swift-android-sdk: 'true'
           swift-android-sdk-version: ${{ matrix.swift-version }}
@@ -96,7 +104,7 @@ jobs:
           HOST_OUTCOME: ${{ steps.host.outcome }}
         run: |
           {
-            echo "### host / $RUNNER_OS / Swift $SWIFT_VERSION / $BUILD_SYSTEM"
+            echo "### host / $RUNNER_OS / Swift $SWIFT_VERSION / $BUILD_SYSTEM / skipstone@$SKIP_SOURCE"
             echo '| Check | Result |'
             echo '| --- | --- |'
             echo "| Host build | $HOST_OUTCOME |"
@@ -118,7 +126,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: fuse-host-${{ matrix.os }}-${{ matrix.swift-version }}-${{ matrix.build-system }}
+          name: fuse-host-${{ matrix.os }}-${{ matrix.swift-version }}-${{ matrix.build-system }}-${{ matrix.skip-source }}
           include-hidden-files: true
           path: |
             skip-fuse/ci-results/
@@ -126,24 +134,31 @@ jobs:
           retention-days: 14
 
   fuse-apk:
-    name: ${{ matrix.os }} / Swift ${{ matrix.swift-version }} / ${{ matrix.build-system }}
-    # Every host cell must be green before any emulator time is spent. `needs` is
-    # all-or-nothing across a matrix, so one red host cell skips the whole APK job.
+    name: ${{ matrix.os }} / Swift ${{ matrix.swift-version }} / ${{ matrix.build-system }} / skipstone@${{ matrix.skip-source }}
+    # Every host cell that gates must be green before any emulator time is spent.
+    # `needs` is all-or-nothing across a matrix, so one red `swiftbuild-native`
+    # host cell skips the whole APK job; the `main` cells are exempt because
+    # their job-level continue-on-error keeps them from counting as failures.
     needs: fuse-host
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
+    continue-on-error: ${{ matrix.skip-source == 'main' }}
     strategy:
       fail-fast: false
       matrix:
         os: [macos-26-intel, ubuntu-24.04]
         swift-version: ['6.3.3', '6.4.0']
         build-system: [swiftbuild, native]
+        # `main` is the control: it shows what skiptools/skipstone#271 changes.
+        # Those cells are informational and gate nothing (continue-on-error below).
+        skip-source: [main, swiftbuild-native]
     defaults:
       run:
         shell: bash
     env:
       SWIFT_VERSION: ${{ matrix.swift-version }}
       BUILD_SYSTEM: ${{ matrix.build-system }}
+      SKIP_SOURCE: ${{ matrix.skip-source }}
       # See the note in the fuse-host job; the APK build reaches the same graph
       # through SKIP_BRIDGE, but this keeps the two jobs building it identically.
       SKIP_DYNAMIC_LIBRARIES: '1'
@@ -164,8 +179,8 @@ jobs:
 
       - uses: skiptools/actions/setup-skip@v1
         with:
-          # TEMPORARY: see the note in the fuse-host job.
-          skip-source: swiftbuild-native
+          # See the note in the fuse-host job.
+          skip-source: ${{ matrix.skip-source }}
           swift-version: ${{ matrix.swift-version }}
           install-swift-android-sdk: 'true'
           swift-android-sdk-version: ${{ matrix.swift-version }}
@@ -207,7 +222,7 @@ jobs:
           APK_OUTCOME: ${{ steps.apk.outcome }}
         run: |
           {
-            echo "### $RUNNER_OS / Swift $SWIFT_VERSION / $BUILD_SYSTEM"
+            echo "### $RUNNER_OS / Swift $SWIFT_VERSION / $BUILD_SYSTEM / skipstone@$SKIP_SOURCE"
             echo '| Check | Result |'
             echo '| --- | --- |'
             echo "| APK build and Swift Testing | $APK_OUTCOME |"
@@ -229,7 +244,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: fuse-apk-${{ matrix.os }}-${{ matrix.swift-version }}-${{ matrix.build-system }}
+          name: fuse-apk-${{ matrix.os }}-${{ matrix.swift-version }}-${{ matrix.build-system }}-${{ matrix.skip-source }}
           include-hidden-files: true
           path: |
             skip-fuse/ci-results/

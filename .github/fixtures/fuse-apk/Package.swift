@@ -12,21 +12,16 @@ let package = Package(
         .library(name: "FuseSmoke", type: .dynamic, targets: ["FuseSmoke"]),
         .library(name: "FuseModel", type: .dynamic, targets: ["FuseModel"]),
     ],
-    // TEMPORARY: the shared library products below are pinned to their `dynamic-libs`
-    // branches, which add the SKIP_DYNAMIC_LIBRARIES check that builds them as dynamic
-    // products. Without it the swiftbuild build system rejects this graph, because two
-    // dynamic products (SkipBridge and SkipAndroidBridge) each statically link the same
-    // automatic-library products. skip-lib, skip-unit and skip-foundation are transitive
-    // dependencies of skip-fuse; they are declared here so the root branch requirement
-    // overrides the version requirement that skip-fuse states for them.
-    // Restore the `from:` requirements once those PRs are merged and released:
-    //   skip-lib#49, skip-unit#24, skip-model#30, skip-foundation#132
+    // The shared library products in this graph honour SKIP_DYNAMIC_LIBRARIES as of
+    // skip-lib 1.4.2, skip-unit 1.7.2, skip-model 1.7.10 and skip-foundation 1.4.5,
+    // which is what lets the swiftbuild build system accept it: without dynamic
+    // products, two dynamic products (SkipBridge and SkipAndroidBridge) each
+    // statically link the same automatic-library products and swiftbuild rejects
+    // the duplication. Those come in transitively through skip-fuse, so only the
+    // direct dependencies are listed here.
     dependencies: [
         .package(path: "../../.."),
-        .package(url: "https://github.com/skiptools/skip-model.git", branch: "dynamic-libs"),
-        .package(url: "https://github.com/skiptools/skip-lib.git", branch: "dynamic-libs"),
-        .package(url: "https://github.com/skiptools/skip-unit.git", branch: "dynamic-libs"),
-        .package(url: "https://github.com/skiptools/skip-foundation.git", branch: "dynamic-libs"),
+        .package(url: "https://github.com/skiptools/skip-model.git", from: "1.0.0"),
     ],
     targets: [
         .target(name: "FuseSmoke", dependencies: [
